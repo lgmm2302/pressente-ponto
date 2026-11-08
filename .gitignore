@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+# Certificados e chaves NUNCA entram no repositório.
+*.pfx
+*.p12
+*.pem
+*.key
+certificado-de-teste/
+.env

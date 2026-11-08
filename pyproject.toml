@@ -1,0 +1,22 @@
+[project]
+name = "pressente-ponto"
+version = "0.1.0"
+description = "Pressente Ponto — Registrador Eletrônico de Ponto via Programa (REP-P), Portaria MTP 671/2021. Nome provisório."
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "asyncpg>=0.29",
+    "pyHanko>=0.25",
+    "reportlab>=4.0",
+    "cryptography>=42",
+    "asn1crypto>=1.5",
+]
+
+[project.optional-dependencies]
+teste = ["pytest>=8", "pytest-asyncio>=0.23", "httpx>=0.27", "pyhanko-certvalidator>=0.26"]
+
+[tool.pytest.ini_options]
+testpaths = ["testes"]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
