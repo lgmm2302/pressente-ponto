@@ -30,6 +30,27 @@ on:
           - '3-publicar'
           - '4-voltar-para-a-versao-anterior'
           - '5-backup-do-banco'
+          - '6-cadastrar-empresa'
+      empresa_cnpj_ou_cpf:
+        description: 'Só na opção 6 — CNPJ (ou CPF) da empresa'
+        required: false
+        default: ''
+      empresa_razao_social:
+        description: 'Só na opção 6 — razão social (ou nome do empregador)'
+        required: false
+        default: ''
+      empresa_cpf_responsavel:
+        description: 'Só na opção 6 — CPF de quem responde pelo cadastro'
+        required: false
+        default: ''
+      empresa_local:
+        description: 'Só na opção 6 — local de prestação de serviços (endereço)'
+        required: false
+        default: ''
+      empresa_fuso:
+        description: 'Só na opção 6 — fuso'
+        required: false
+        default: 'America/Cuiaba'
 
 concurrency:
   group: publicar-ponto
@@ -132,11 +153,16 @@ jobs:
         env:
           PONTO_HOST_PUBLICO: ${{ vars.PONTO_HOST_PUBLICO }}
           ACAO: ${{ inputs.o_que_fazer }}
+          CAD_ID: ${{ inputs.empresa_cnpj_ou_cpf }}
+          CAD_RAZAO: ${{ inputs.empresa_razao_social }}
+          CAD_CPF: ${{ inputs.empresa_cpf_responsavel }}
+          CAD_LOCAL: ${{ inputs.empresa_local }}
+          CAD_FUSO: ${{ inputs.empresa_fuso }}
         with:
           host: ${{ secrets.PONTO_VM_HOST }}
           username: ${{ secrets.PONTO_VM_USER }}
           key: ${{ secrets.PONTO_VM_SSH_KEY }}
-          envs: PONTO_HOST_PUBLICO,ACAO
+          envs: PONTO_HOST_PUBLICO,ACAO,CAD_ID,CAD_RAZAO,CAD_CPF,CAD_LOCAL,CAD_FUSO
           command_timeout: 30m
           script: |
             case "$ACAO" in
@@ -145,9 +171,11 @@ jobs:
               3-publicar) a=publicar ;;
               4-voltar-para-a-versao-anterior) a=voltar ;;
               5-backup-do-banco) a=backup ;;
+              6-cadastrar-empresa) a=cadastrar ;;
               *) echo "ação desconhecida"; exit 1 ;;
             esac
-            PONTO_HOST_PUBLICO="$PONTO_HOST_PUBLICO" bash "$HOME/_ponto_novo/implantacao/ponto.sh" "$a"
+            PONTO_HOST_PUBLICO="$PONTO_HOST_PUBLICO" CAD_ID="$CAD_ID" CAD_RAZAO="$CAD_RAZAO" CAD_CPF="$CAD_CPF" \
+              CAD_LOCAL="$CAD_LOCAL" CAD_FUSO="$CAD_FUSO" bash "$HOME/_ponto_novo/implantacao/ponto.sh" "$a"
 
       - name: Escrever o resumo
         if: always()

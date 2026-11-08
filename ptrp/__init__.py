@@ -5,4 +5,4 @@ jornada, gera o espelho de ponto e o AEJ (Anexo VI).
 """
 
 NOME_DO_PROGRAMA = "Pressente Ponto - Tratamento"
-VERSAO = "0.1.0"
+VERSAO = "1.0.0"

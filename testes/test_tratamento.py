@@ -193,7 +193,7 @@ async def test_aej(conn, base, monkeypatch, assinador, certificado):
     assert "06|1|MAT-001" in linhas
     assert "07|1|1|2026-11-08||" in linhas          # DSR
     assert "07|2|2|2026-11-02||" in linhas          # falta do Bruno
-    assert linhas[-3].startswith("08|Pressente Ponto - Tratamento|0.1.0|1|11222333000181|FPM Tech Solutions Ltda|")
+    assert linhas[-3].startswith("08|Pressente Ponto - Tratamento|1.0.0|1|11222333000181|FPM Tech Solutions Ltda|")
     contagem = [sum(1 for l in linhas if l.startswith(f"{t:02d}|")) for t in range(1, 9)]
     assert linhas[-2] == "99|" + "|".join(map(str, contagem))
     assert linhas[-1] == f.LINHA_DA_ASSINATURA

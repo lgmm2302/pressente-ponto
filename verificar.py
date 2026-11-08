@@ -14,6 +14,7 @@ Precisa de um PostgreSQL de teste em PONTO_BANCO_TESTE
 """
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -89,6 +90,9 @@ MUTACOES = [
     ("ptrp/aej.py", 'if (x.tipo == "D" or m.fonte == "I") else ""', 'if x.tipo == "D" else ""',
      "inclusão sem motivo no AEJ"),
     ("ptrp/aej.py", 'VERSAO_DO_LEIAUTE = "002"', 'VERSAO_DO_LEIAUTE = "001"', "versão antiga do leiaute"),
+    # ── INPI e atestado ──
+    ("reppp/atestado.py", '("Versão", f"a partir de {VERSAO}")', '("Versão", VERSAO)', "atestado sem «a partir de» na versão"),
+    ("reppp/atestado.py", "    if faltando:\n", "    if False:\n", "atestado sai sem quem assina"),
     # ── prova da batida ──
     ("reppp/registro.py", "if cfg.coletar_foto and prova.foto:", "if prova.foto:", "foto guardada sem a empresa pedir"),
     ("reppp/registro.py", "local = prova.local if cfg.coletar_local else None", "local = prova.local",
@@ -110,8 +114,10 @@ PLACEBO = ("reppp/formato.py", "Um valor que não cabe no leiaute.", "Um valor q
 
 
 def pytest_em(pasta: Path) -> bool:
+    # Na rodada de mutações a trava da versão do INPI sai: senão QUALQUER estrago
+    # «seria pego» só por mudar o hash do pacote, e a bateria não provaria nada.
     r = subprocess.run([sys.executable, "-m", "pytest", "-x", "-q", "-p", "no:cacheprovider"], cwd=pasta,
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, env={**os.environ, "PONTO_SEM_TRAVA_DE_VERSAO": "1"})
     return r.returncode == 0
 
 

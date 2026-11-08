@@ -31,7 +31,7 @@ import asyncpg
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from . import afd, assinatura, comprovante, formato as f, prova, registro
+from . import NOME_DO_PROGRAMA, VERSAO, afd, assinatura, atestado, comprovante, formato as f, prova, registro
 
 
 # Os corpos dos pedidos (no módulo: o FastAPI resolve as anotações por nome).
@@ -94,6 +94,10 @@ class Config:
         # Em produção o esquema é criado pela migração (usuário dono do banco);
         # os serviços rodam com usuários sem permissão de DDL.
         self.criar_esquema = os.environ.get("PONTO_CRIAR_ESQUEMA", "1") == "1"
+        # Para o atestado técnico (fase 9): quem assina por parte do desenvolvedor.
+        self.desenvolvedor_razao = os.environ.get("PONTO_DESENVOLVEDOR_RAZAO", "")
+        self.representante_legal = os.environ.get("PONTO_REPRESENTANTE_LEGAL", "")
+        self.responsavel_tecnico = os.environ.get("PONTO_RESPONSAVEL_TECNICO", "")
 
 
 def criar_app(config: Config | None = None, assinador: assinatura.Assinador | None = None) -> FastAPI:
@@ -279,6 +283,29 @@ def criar_app(config: Config | None = None, assinador: assinatura.Assinador | No
         segundos) no momento da batida (Anexo IX)."""
         return {"agora": registro.agora().isoformat()}
 
+    @app.get("/v1/atestado")
+    async def baixar_atestado(eid: int = Depends(estabelecimento), conn=Depends(conexao)):
+        """O Atestado Técnico e Termo de Responsabilidade desta empresa usuária (art. 89), preenchido e
+        pronto para as duas assinaturas qualificadas (representante legal e responsável técnico)."""
+        est = await conn.fetchrow("SELECT * FROM estabelecimentos WHERE id=$1", eid)
+        a = estado["assinador"]
+        try:
+            pdf = atestado.montar(
+                empresa=f.Empregador(est["tipo_identificador"], est["identificador"], est["razao_social"],
+                                     est["cno_caepf"], est["local_prestacao"]),
+                desenvolvedor=atestado.Desenvolvedor(cfg.desenvolvedor_razao, cfg.desenvolvedor.tipo_identificador,
+                                                     f.identificador_normalizado(cfg.desenvolvedor.tipo_identificador,
+                                                                                 cfg.desenvolvedor.identificador),
+                                                     cfg.representante_legal, cfg.responsavel_tecnico),
+                numero_inpi=cfg.numero_inpi, nome_do_programa=NOME_DO_PROGRAMA,
+                certificado_titular=a.titular + (" (CERTIFICADO DE TESTE — sem valor legal)" if a.de_teste else ""),
+                certificado_sha256=atestado.impressao_do_certificado(a.signer.signing_cert.dump()),
+                emitido_em=registro.agora())
+        except ValueError as e:
+            raise HTTPException(409, str(e))
+        return Response(pdf, media_type="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="atestado-tecnico-{est["identificador"]}.pdf"'})
+
     @app.get("/v1/saude")
     async def saude(conn=Depends(conexao)):
         await conn.fetchval("SELECT 1")
@@ -286,7 +313,7 @@ def criar_app(config: Config | None = None, assinador: assinatura.Assinador | No
 
     @app.get("/v1/versao")
     async def versao():
-        return ler_versao()
+        return {**ler_versao(), "programa": NOME_DO_PROGRAMA, "versao": VERSAO}
 
     return app
 

@@ -13,6 +13,8 @@
 #   voltar      volta para a versão anterior
 #   backup      pg_dump do banco do ponto (guarda os 14 mais novos) e expurgo
 #               das fotos com prazo de guarda vencido
+#   cadastrar   cadastra uma empresa no REP-P e mostra UMA vez a chave dela
+#               (CAD_ID, CAD_RAZAO, CAD_CPF, CAD_FUSO, CAD_LOCAL)
 #
 # Nunca imprime senha, URL de banco nem chave. O que é segredo fica em
 # /etc/pressente-ponto (root:ponto, 0640).
@@ -136,6 +138,7 @@ Wants=postgresql.service
 [Service]
 User=ponto
 Group=ponto
+EnvironmentFile=-$ETC/desenvolvedor.env
 EnvironmentFile=$ETC/$env
 WorkingDirectory=$BASE/atual
 ExecStart=$BASE/atual/.venv/bin/uvicorn --factory $app --host 127.0.0.1 --port $porta --workers 2 --proxy-headers
@@ -188,20 +191,12 @@ SQL
       { printf "PONTO_BANCO=$URL\n" ponto_rep "$SR"
         echo "PONTO_CRIAR_ESQUEMA=0"
         echo "PONTO_CHAVE_ADMINISTRACAO=$SA"
-        echo "PONTO_NUMERO_INPI="
-        echo "PONTO_DESENVOLVEDOR_TIPO=1"
-        echo "PONTO_DESENVOLVEDOR_ID="
         echo "PONTO_CHAVE_PEM=$ETC/certificado-de-teste/teste-chave.pem"
         echo "PONTO_CERTIFICADO_PEM=$ETC/certificado-de-teste/teste-certificado.pem"
         echo "PONTO_CERTIFICADO_DE_TESTE=1"
       } | sudo -n tee "$ETC/rep.env" >/dev/null
       { printf "PONTO_BANCO=$URL\n" ponto_ptrp "$SP"
         echo "PONTO_CRIAR_ESQUEMA=0"
-        echo "PONTO_NUMERO_INPI="
-        echo "PONTO_DESENVOLVEDOR_TIPO=1"
-        echo "PONTO_DESENVOLVEDOR_ID="
-        echo "PONTO_DESENVOLVEDOR_RAZAO="
-        echo "PONTO_DESENVOLVEDOR_EMAIL="
         echo "PONTO_CHAVE_PEM=$ETC/certificado-de-teste/teste-chave.pem"
         echo "PONTO_CERTIFICADO_PEM=$ETC/certificado-de-teste/teste-certificado.pem"
         echo "PONTO_CERTIFICADO_DE_TESTE=1"
@@ -265,6 +260,11 @@ publicar() {
   sudo -n chown -R root:root "$rel" && sudo -n chmod -R a+rX "$rel"
   echo "[banco] migrando com o usuário dono"
   sudo -n bash -c "set -a; . '$ETC/dono.env'; set +a; cd '$rel' && .venv/bin/python -m scripts.migrar"
+  # Os dados públicos do desenvolvedor (nome, CNPJ, nº do INPI, quem assina o
+  # atestado) vêm do repositório: implantacao/desenvolvedor.env.
+  if [ -f "$rel/implantacao/desenvolvedor.env" ]; then
+    sudo -n install -o root -g ponto -m 0640 "$rel/implantacao/desenvolvedor.env" "$ETC/desenvolvedor.env"
+  fi
   anterior="$(readlink -f "$BASE/atual" 2>/dev/null || true)"
   trocar_para "$rel"
   if saudavel; then
@@ -316,11 +316,44 @@ backup() {
   sudo -n bash -c "set -a; . '$ETC/dono.env'; set +a; cd '$cur' && .venv/bin/python -m scripts.expurgar_fotos"
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+cadastrar() {
+  titulo "Pressente Ponto — cadastrar empresa (estabelecimento)"
+  precisa_sudo
+  sudo -n test -f "$ETC/rep.env" || falha "o ponto ainda não foi instalado nesta VM: rode a opção «instalar»."
+  local adm
+  adm="$(sudo -n grep '^PONTO_CHAVE_ADMINISTRACAO=' "$ETC/rep.env" | cut -d= -f2-)"
+  [ -n "$adm" ] || falha "a chave de administração não está em $ETC/rep.env."
+  ADM="$adm" python3 - <<'PY'
+import json, os, urllib.error, urllib.request
+corpo = {"tipo_identificador": 1 if len("".join(c for c in os.environ.get("CAD_ID", "") if c.isalnum())) == 14 else 2,
+         "identificador": os.environ.get("CAD_ID", ""), "razao_social": os.environ.get("CAD_RAZAO", ""),
+         "cpf_responsavel": os.environ.get("CAD_CPF", ""), "fuso": os.environ.get("CAD_FUSO") or "America/Cuiaba",
+         "local_prestacao": os.environ.get("CAD_LOCAL", "")}
+pedido = urllib.request.Request("http://127.0.0.1:8710/v1/estabelecimentos", data=json.dumps(corpo).encode(),
+                                headers={"Content-Type": "application/json", "X-Chave-Administracao": os.environ["ADM"]},
+                                method="POST")
+try:
+    with urllib.request.urlopen(pedido, timeout=30) as r:
+        d = json.load(r)
+except urllib.error.HTTPError as e:
+    detalhe = json.loads(e.read() or b"{}").get("detail")
+    raise SystemExit(f"ERRO: o REP-P recusou ({e.code}): {detalhe}")
+print(f"[ok] empresa cadastrada (estabelecimento {d['id']}).")
+print("")
+print("CHAVE DO ESTABELECIMENTO (aparece só agora — copie para o ExxenOS, em Ponto › Pressente Ponto):")
+print(d["chave"])
+print("")
+print("Depois de copiar, apague o registro desta execução no GitHub (… › Delete all logs).")
+PY
+}
+
 case "$ACAO" in
   verificar) verificar ;;
   instalar) instalar ;;
   publicar) publicar; verificar ;;
   voltar) voltar; verificar ;;
   backup) backup ;;
+  cadastrar) cadastrar ;;
   *) falha "ação desconhecida: $ACAO" ;;
 esac

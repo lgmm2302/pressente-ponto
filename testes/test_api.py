@@ -78,7 +78,27 @@ def test_estabelecimento_repetido(cliente):
     assert r.status_code == 409
 
 
+def test_atestado_sem_quem_assina_nao_sai(cliente):
+    h = _estabelecimento(cliente)
+    r = cliente.get("/v1/atestado", headers=h)
+    assert r.status_code == 409 and "representante legal" in r.text
+
+
+def test_atestado_da_empresa(banco, assinador, monkeypatch):
+    for k, v in {"PONTO_BANCO": banco, "PONTO_CHAVE_ADMINISTRACAO": ADMIN, "PONTO_NUMERO_INPI": "512026001234",
+                 "PONTO_DESENVOLVEDOR_ID": "11222333000181", "PONTO_DESENVOLVEDOR_RAZAO": "FPM Tech Solutions Ltda",
+                 "PONTO_REPRESENTANTE_LEGAL": "Fulano Representante", "PONTO_RESPONSAVEL_TECNICO": "Beltrano Tecnico"}.items():
+        monkeypatch.setenv(k, v)
+    with TestClient(api.criar_app(api.Config(), assinador)) as c:
+        h = _estabelecimento(c)
+        r = c.get("/v1/atestado", headers=h)
+        assert r.status_code == 200 and r.content.startswith(b"%PDF")
+        assert b"11.222.333/0001-81" in r.content and b"CERTIFICADO DE TESTE" in r.content
+        assert c.get("/v1/atestado").status_code == 422  # sem a chave da empresa
+
+
 def test_hora_saude_e_versao(cliente):
     assert "agora" in cliente.get("/v1/hora").json()
     assert cliente.get("/v1/saude").json() == {"ok": True}
-    assert "commit" in cliente.get("/v1/versao").json()
+    v = cliente.get("/v1/versao").json()
+    assert "commit" in v and v["versao"] == "1.0.0" and v["programa"] == "Pressente Ponto - REP-P"
