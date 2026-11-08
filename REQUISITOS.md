@@ -36,11 +36,31 @@ I e XII; arts. 2º a 23; arts. 140 a 184-F); as regras de ponto seguem nela.
 Validar um AFD gerado aqui num validador de terceiros (ex.: o de um fabricante
 conhecido) antes do registro.
 
+## Programa de tratamento (feito na fase 5)
+
+- PTRP separado do REP-P; preserva as marcações originais e só acrescenta
+  (inclusão «I», desconsideração «D», pré-assinalação «P», ausências e banco) —
+  Portaria 671, art. 82 e perguntas 53 a 56 do MTE.
+- AEJ do Anexo VI (versão 002) e espelho de ponto (art. 84), ambos assinados.
+
+### A confirmar no AEJ
+1. `seqEntSaida` com 3 dígitos (adotado: «001»).
+2. `seqEntSaida` de uma marcação desconsiderada (adotado: o do par em que caiu).
+3. Nome do arquivo (a Portaria não exige; adotado `AEJ_<CNPJ>_<início>_<fim>.txt`).
+4. CNO × CAEPF: hoje decididos pelo tamanho do número cadastrado (12 ou 14).
+
+### A conferir com o advogado (regras de cálculo)
+- Prorrogação do noturno (Súmula 60, II): aplicada quando pelo menos metade da
+  janela 22h–5h foi trabalhada e o turno segue depois das 5h.
+- Banco de horas: extras viram crédito e atrasos viram débito; faltas não entram.
+- Dia sem escala com trabalho: tratado como folga (extra comum).
+- Tolerância do intervalo (TST, IRR Tema 14): até 5 min no total.
+
 ## Ainda não feito (fases seguintes)
 
-- Programa de tratamento: jornadas, escalas, extras, noturno, banco de horas,
-  espelho mensal com aceite, **AEJ (Anexo VI)**.
-- Ajustes com ciência do empregado (registro novo, original preservado).
+- App web de batida para quem licenciar só o ponto (fase 4).
+- Vencimento do banco de horas (pagar o saldo vencido) e DSR perdido por falta.
+- Folga compensatória de feriado (AEJ 07 tipo 4).
 - Sincronização e monitoramento do relógio com a HLB (desvio ≤ 30 s).
 - Eventos 07/08 automáticos de disponibilidade e indisponibilidade.
 - Alta disponibilidade e armazenamento redundante do ARP (infraestrutura).

@@ -19,6 +19,24 @@ no banco daqui: eles **batem o ponto e leem** pela API.
 | AFD | `reppp/afd.py` | Anexo V: registros 1, 2, 5, 6, 7 e 9, ISO 8859-1, CR LF, CRC-16/KERMIT, linha de assinatura e `.p7s` (CAdES destacada) |
 | API | `reppp/api.py` | Estabelecimentos, empregados, marcações, comprovantes, AFD, conferência e hora |
 
+## O programa de tratamento (fase 5) — `ptrp/`
+
+Processo **separado** do REP-P (`ptrp/api.py`): lê as marcações e nunca as
+altera; grava só nas tabelas `ptrp_*`, que também não aceitam UPDATE nem DELETE.
+
+| Peça | Onde | Regra |
+| --- | --- | --- |
+| Horários, escalas, regras, feriados | `ptrp/dados.py` | Horário não se edita (novo código); escala e regras têm vigência; a escala exige DSR |
+| Regras de cálculo | `ptrp/regras.py` | Padrão da CLT; a convenção muda o que pode; recusa adicional abaixo do mínimo legal |
+| Apuração | `ptrp/apuracao.py` | Tolerância de 5/10 min (art. 58 §1º, Súm. 366), noturno 22h–5h com hora reduzida e prorrogação (art. 73, Súm. 60), intervalo (art. 71, Tema 14), interjornada (art. 66), limite de 2 h (art. 59), DSR, feriado, folga, faltas, abonos, banco de horas, pré-assinalação, alerta de ponto britânico (Súm. 338) |
+| Tratamentos | `ptrp/dados.py` | Incluir, desconsiderar, abonar e revogar: sempre registro novo, com motivo e autor; a original fica |
+| Ciência | `ptrp/dados.py` | O empregado dá ciência ou recusa (com motivo) cada tratamento, uma vez só |
+| Espelho | `ptrp/espelho.py` | PDF mensal assinado (PAdES), versões imutáveis, aceite ou contestação do empregado |
+| AEJ | `ptrp/aej.py` | Anexo VI, versão 002, separador «\|», CR LF, ISO 8859-1, `.p7s` |
+
+Em produção, rode os dois processos com usuários de banco diferentes
+(`scripts/permissoes.sql`): o do tratamento só lê o REP-P.
+
 O que ainda falta está em `REQUISITOS.md` (pontos a confirmar no texto oficial)
 e no plano da especificação (programa de tratamento, AEJ, ajustes com ciência,
 prova extra, integração).

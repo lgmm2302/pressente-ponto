@@ -7,6 +7,7 @@ alterado, nem se a execução for interrompida.
   python verificar.py            # testes + mutações
   python verificar.py --rapido   # só os testes
   python verificar.py --parte 1/2  # metade das mutações (máquina lenta)
+  python verificar.py --so "Tema 14" # só as mutações com esse trecho no nome
 
 Precisa de um PostgreSQL de teste em PONTO_BANCO_TESTE
 (padrão postgresql://postgres@127.0.0.1:5432/postgres).
@@ -53,6 +54,41 @@ MUTACOES = [
     ("reppp/comprovante.py", 'linha("Registro do REP-P no INPI", numero_inpi or "—")', "pass",
      "comprovante sem o número do INPI"),
     ("reppp/api.py", "if dono != eid:", "if dono is None:", "um estabelecimento lê o comprovante do outro"),
+    # ── programa de tratamento ──
+    ("ptrp/apuracao.py", " and sum(desvios) <= r.tolerancia_diaria", "", "tolerância sem o teto de 10 min no dia"),
+    ("ptrp/apuracao.py", "return real - noturno + noturno * 60 / 52.5", "return real", "sem a hora noturna reduzida"),
+    ("ptrp/apuracao.py", "noturno += sum(_sobreposicao(e, s, we, datetime.max) for e, s in pares)", "pass",
+     "sem a prorrogação do noturno (Súmula 60)"),
+    ("ptrp/apuracao.py", "minimo = (r.intervalo_minimo_acima_de_6h if real > 360",
+     "minimo = (r.intervalo_minimo_acima_de_6h if real > 480", "intervalo de 1 h só depois de 8 h"),
+    ("ptrp/apuracao.py", "if folga < r.interjornada_minima:", "if False:", "interjornada ignorada"),
+    ("ptrp/apuracao.py", "dia.falta = True", "dia.falta = False", "falta não registrada"),
+    ("ptrp/apuracao.py", "dia.extra_descanso_feriado = dia.computado", "dia.extra = dia.computado",
+     "DSR e feriado pagos a 50%"),
+    ("ptrp/apuracao.py", "if dia is not None and dia.exato:", "if False:", "sem alerta de ponto britânico"),
+    ("ptrp/apuracao.py", "                dia.extra = 0\n", "", "banco de horas paga e credita a mesma hora"),
+    ("ptrp/apuracao.py", "if (aberta and vao < ESPERA_MAXIMA_PELA_SAIDA) or (not aberta and vao < separador):",
+     "if vao < separador:", "jornada longa partida em duas"),
+    ("ptrp/regras.py", "if self.adicional_extra < 50:", "if False:", "adicional de extra abaixo de 50% aceito"),
+    ("ptrp/apuracao.py", "if minimo - gozado > r.tolerancia_intervalo:", "if minimo - gozado > 0:",
+     "variação ínfima do intervalo vira supressão (Tema 14)"),
+    ("ptrp/apuracao.py", 'excesso = dia.extra if situacao == "trabalho" else dia.computado - 480',
+     "excesso = dia.extra + dia.extra_descanso_feriado", "limite de 2 h extras ignora o descanso"),
+    ("ptrp/dados.py", 'validos = [t for t in trat if not t["revogado"]]', "validos = list(trat)",
+     "tratamento revogado ainda vale"),
+    ("ptrp/dados.py", 'if t is None or t["cpf"] != f.so_digitos(cpf):', "if t is None:",
+     "outro empregado dá ciência por ele"),
+    ("ptrp/dados.py", "if momento > agora():", "if False:", "marcação incluída no futuro"),
+    ("ptrp/esquema.sql", "BEFORE UPDATE OR DELETE ON %I FOR EACH ROW", "BEFORE UPDATE ON %I FOR EACH ROW",
+     "tratamento apagável"),
+    ("ptrp/esquema.sql", "espelho_id          BIGINT NOT NULL UNIQUE REFERENCES",
+     "espelho_id          BIGINT NOT NULL REFERENCES", "aceite repetido no mesmo espelho"),
+    ("ptrp/aej.py", 'ID_DO_REP if m.fonte == "O" else ""', "ID_DO_REP", "marcação incluída atribuída ao REP"),
+    ("ptrp/aej.py", '(x.tipo == "E" and x.seq == 1 and dia.horario)', '(x.tipo == "E" and dia.horario)',
+     "código do horário em toda entrada"),
+    ("ptrp/aej.py", 'if (x.tipo == "D" or m.fonte == "I") else ""', 'if x.tipo == "D" else ""',
+     "inclusão sem motivo no AEJ"),
+    ("ptrp/aej.py", 'VERSAO_DO_LEIAUTE = "002"', 'VERSAO_DO_LEIAUTE = "001"', "versão antiga do leiaute"),
 ]
 PLACEBO = ("reppp/formato.py", "Um valor que não cabe no leiaute.", "Um valor que não cabe no layout.",
            "PLACEBO — só um comentário")
@@ -78,6 +114,9 @@ def main() -> int:
             return 0
         falhas = []
         lista = MUTACOES + [PLACEBO]
+        if "--so" in sys.argv:
+            trecho = sys.argv[sys.argv.index("--so") + 1]
+            lista = [m for m in lista if trecho in m[3]]
         if "--parte" in sys.argv:
             k, n = map(int, sys.argv[sys.argv.index("--parte") + 1].split("/"))
             lista = [m for i, m in enumerate(lista) if i % n == k - 1]
