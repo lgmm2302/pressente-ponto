@@ -1,0 +1,210 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PRESSENTE PONTO · PUBLICAR — o botão (Actions → «Publicar o Pressente Ponto»
+# → Run workflow → escolha o que fazer).
+#
+# Roda na VM da plataforma Pressente, ao lado das escolas, mas com banco,
+# usuários e serviços próprios (implantacao/ponto.sh). Publicar só acontece
+# depois que os testes e as mutações passarem; se a versão nova não responder,
+# o servidor volta sozinho para a anterior.
+#
+# Para ligar, cadastre em Settings → Secrets and variables → Actions:
+#   Secrets:   PONTO_VM_HOST, PONTO_VM_USER, PONTO_VM_SSH_KEY
+#              (os mesmos valores do servidor da plataforma)
+#   Variables: PONTO_HOST_PUBLICO  (ex.: ponto.pressente.com.br — o DNS desse
+#              nome precisa apontar para a VM)
+# Sem eles, o botão para no primeiro passo e diz o que falta.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Publicar o Pressente Ponto
+
+on:
+  workflow_dispatch:
+    inputs:
+      o_que_fazer:
+        description: 'O que você quer fazer'
+        required: true
+        default: '1-verificar-sem-mudar-nada'
+        type: choice
+        options:
+          - '1-verificar-sem-mudar-nada'
+          - '2-instalar-pela-primeira-vez'
+          - '3-publicar'
+          - '4-voltar-para-a-versao-anterior'
+          - '5-backup-do-banco'
+          - '6-cadastrar-empresa'
+      empresa_cnpj_ou_cpf:
+        description: 'Só na opção 6 — CNPJ (ou CPF) da empresa'
+        required: false
+        default: ''
+      empresa_razao_social:
+        description: 'Só na opção 6 — razão social (ou nome do empregador)'
+        required: false
+        default: ''
+      empresa_cpf_responsavel:
+        description: 'Só na opção 6 — CPF de quem responde pelo cadastro'
+        required: false
+        default: ''
+      empresa_local:
+        description: 'Só na opção 6 — local de prestação de serviços (endereço)'
+        required: false
+        default: ''
+      empresa_fuso:
+        description: 'Só na opção 6 — fuso'
+        required: false
+        default: 'America/Cuiaba'
+
+concurrency:
+  group: publicar-ponto
+  cancel-in-progress: false
+
+jobs:
+  testes:
+    name: Testes antes de publicar
+    if: contains(fromJSON('["2-instalar-pela-primeira-vez","3-publicar"]'), inputs.o_que_fazer)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: teste
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PONTO_BANCO_TESTE: postgresql://postgres:teste@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-teste.txt
+      - run: pip install -r requirements-teste.txt
+      - name: Testes e mutações
+        run: python verificar.py
+
+  publicar:
+    needs: testes
+    if: ${{ !cancelled() && (needs.testes.result == 'success' || needs.testes.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: O ponto tem servidor configurado?
+        env:
+          HOST: ${{ secrets.PONTO_VM_HOST }}
+          USUARIO: ${{ secrets.PONTO_VM_USER }}
+          CHAVE: ${{ secrets.PONTO_VM_SSH_KEY }}
+          PUBLICO: ${{ vars.PONTO_HOST_PUBLICO }}
+        run: |
+          faltam=""
+          [ -n "$HOST" ]    || faltam="$faltam PONTO_VM_HOST"
+          [ -n "$USUARIO" ] || faltam="$faltam PONTO_VM_USER"
+          [ -n "$CHAVE" ]   || faltam="$faltam PONTO_VM_SSH_KEY"
+          [ -n "$PUBLICO" ] || faltam="$faltam PONTO_HOST_PUBLICO(variável)"
+          if [ -n "$faltam" ]; then
+            {
+              echo "## ⏸️ Falta configurar o servidor"
+              echo ""
+              echo "Nada foi tocado. Cadastre em Settings → Secrets and variables → Actions:"
+              echo ""
+              for f in $faltam; do echo "- \`$f\`"; done
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "PAREI: faltam:$faltam"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Anotar a versão publicada
+        id: versao
+        env:
+          ACAO: ${{ inputs.o_que_fazer }}
+          RUN: ${{ github.run_number }}
+          TZ: America/Cuiaba
+        run: |
+          set -euo pipefail
+          CURTO="$(git rev-parse --short HEAD)"
+          DATA="$(git log -1 --date=format-local:'%d/%m/%Y %H:%M' --format=%cd)"
+          ASSUNTO="$(git log -1 --format=%s)"
+          jq -n --arg commit "$(git rev-parse HEAD)" --arg commit_curto "$CURTO" --arg data "$DATA" \
+                --arg mensagem "$ASSUNTO" --arg acao "$ACAO" --arg run "$RUN" \
+                '{commit:$commit, commit_curto:$commit_curto, data:$data, mensagem:$mensagem, acao:$acao, run:$run}' \
+                > VERSAO_PUBLICADA.json
+          FIM="fim-$(openssl rand -hex 8)"
+          { echo "curto=$CURTO"; echo "data=$DATA"; echo "mensagem<<$FIM"; echo "$ASSUNTO"; echo "$FIM"; } >> "$GITHUB_OUTPUT"
+
+      - name: Preparar o pacote
+        run: |
+          mkdir -p _pacote
+          cp -r reppp ptrp scripts implantacao requirements.txt VERSAO_PUBLICADA.json _pacote/
+
+      - name: Enviar o código para a VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PONTO_VM_HOST }}
+          username: ${{ secrets.PONTO_VM_USER }}
+          key: ${{ secrets.PONTO_VM_SSH_KEY }}
+          source: _pacote/
+          target: /home/${{ secrets.PONTO_VM_USER }}/_ponto_novo
+          strip_components: 1
+          rm: true
+
+      - name: Executar na VM
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          PONTO_HOST_PUBLICO: ${{ vars.PONTO_HOST_PUBLICO }}
+          ACAO: ${{ inputs.o_que_fazer }}
+          CAD_ID: ${{ inputs.empresa_cnpj_ou_cpf }}
+          CAD_RAZAO: ${{ inputs.empresa_razao_social }}
+          CAD_CPF: ${{ inputs.empresa_cpf_responsavel }}
+          CAD_LOCAL: ${{ inputs.empresa_local }}
+          CAD_FUSO: ${{ inputs.empresa_fuso }}
+        with:
+          host: ${{ secrets.PONTO_VM_HOST }}
+          username: ${{ secrets.PONTO_VM_USER }}
+          key: ${{ secrets.PONTO_VM_SSH_KEY }}
+          envs: PONTO_HOST_PUBLICO,ACAO,CAD_ID,CAD_RAZAO,CAD_CPF,CAD_LOCAL,CAD_FUSO
+          command_timeout: 30m
+          script: |
+            case "$ACAO" in
+              1-verificar-sem-mudar-nada) a=verificar ;;
+              2-instalar-pela-primeira-vez) a=instalar ;;
+              3-publicar) a=publicar ;;
+              4-voltar-para-a-versao-anterior) a=voltar ;;
+              5-backup-do-banco) a=backup ;;
+              6-cadastrar-empresa) a=cadastrar ;;
+              *) echo "ação desconhecida"; exit 1 ;;
+            esac
+            PONTO_HOST_PUBLICO="$PONTO_HOST_PUBLICO" CAD_ID="$CAD_ID" CAD_RAZAO="$CAD_RAZAO" CAD_CPF="$CAD_CPF" \
+              CAD_LOCAL="$CAD_LOCAL" CAD_FUSO="$CAD_FUSO" bash "$HOME/_ponto_novo/implantacao/ponto.sh" "$a"
+
+      - name: Escrever o resumo
+        if: always()
+        env:
+          STATUS: ${{ job.status }}
+          ACAO: ${{ inputs.o_que_fazer }}
+          CURTO: ${{ steps.versao.outputs.curto }}
+          DATA: ${{ steps.versao.outputs.data }}
+          MENSAGEM: ${{ steps.versao.outputs.mensagem }}
+          PUBLICO: ${{ vars.PONTO_HOST_PUBLICO }}
+        run: |
+          {
+            echo "## Resultado"
+            echo ""
+            if [ "$STATUS" = "success" ]; then echo "### ✅ Deu tudo certo"; else echo "### ❌ Alguma coisa falhou"; fi
+            echo ""
+            echo "Ação: \`$ACAO\`"
+            echo ""
+            if [ -n "$CURTO" ]; then
+              echo "**Versão:** \`$CURTO\` — $MENSAGEM (commit de $DATA, horário de Cuiabá)."
+              echo ""
+              echo "> Se essa não é a mensagem do seu último commit, o envio (push) ainda não tinha chegado ao GitHub."
+            fi
+            if [ -n "$PUBLICO" ]; then
+              echo ""
+              echo "Endereço: https://$PUBLICO/v1/hora"
+            fi
+            if [ "$STATUS" != "success" ]; then
+              echo ""
+              echo "Abra o passo «Executar na VM» para ver a mensagem em português do que faltou."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,73 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Testes — roda sozinho a cada envio (push) e quando você pedir.
+#
+# 1. Os testes (REP-P, tratamento, APIs) contra um PostgreSQL de verdade.
+# 2. As mutações: cada regra legal é quebrada de propósito, uma por vez, e os
+#    testes precisam pegar. Se algum estrago passar despercebido, fica vermelho.
+# Não toca em servidor nenhum.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Testes
+
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: testes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testes:
+    name: Testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: teste
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PONTO_BANCO_TESTE: postgresql://postgres:teste@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-teste.txt
+      - run: pip install -r requirements-teste.txt
+      - name: Testes
+        run: python verificar.py --rapido
+
+  mutacoes:
+    name: Mutações (parte ${{ matrix.parte }} de 4)
+    needs: testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        parte: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: teste
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PONTO_BANCO_TESTE: postgresql://postgres:teste@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-teste.txt
+      - run: pip install -r requirements-teste.txt
+      - name: Cada regra quebrada de propósito precisa ser pega
+        run: python verificar.py --parte ${{ matrix.parte }}/4
