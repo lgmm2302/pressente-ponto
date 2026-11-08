@@ -117,8 +117,9 @@ def criar_app(config: Config | None = None, assinador: assinatura.Assinador | No
     @asynccontextmanager
     async def ciclo(app: FastAPI):
         estado["pool"] = await asyncpg.create_pool(cfg.banco, min_size=1, max_size=10)
-        async with estado["pool"].acquire() as c:
-            await dados.criar_esquema(c)
+        if cfg.criar_esquema:
+            async with estado["pool"].acquire() as c:
+                await dados.criar_esquema(c)
         estado["assinador"] = assinador or assinatura.do_ambiente()
         yield
         await estado["pool"].close()
@@ -141,6 +142,11 @@ def criar_app(config: Config | None = None, assinador: assinatura.Assinador | No
             return await coro
         except registro.Recusado as e:
             raise HTTPException(422, str(e))
+
+    @app.get("/v1/saude-tratamento")
+    async def saude(conn=Depends(conexao)):
+        await conn.fetchval("SELECT 1")
+        return {"ok": True}
 
     @app.post("/v1/horarios", status_code=201)
     async def horario(d: NovoHorario, eid: int = Depends(estabelecimento), conn=Depends(conexao)):

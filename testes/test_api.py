@@ -78,5 +78,7 @@ def test_estabelecimento_repetido(cliente):
     assert r.status_code == 409
 
 
-def test_hora_do_servidor(cliente):
+def test_hora_saude_e_versao(cliente):
     assert "agora" in cliente.get("/v1/hora").json()
+    assert cliente.get("/v1/saude").json() == {"ok": True}
+    assert "commit" in cliente.get("/v1/versao").json()

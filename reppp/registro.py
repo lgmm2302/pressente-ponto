@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 import asyncpg
 
 from . import formato as f
+from . import prova as pv
 
 ESQUEMA = (Path(__file__).parent / "esquema.sql").read_text(encoding="utf-8")
 
@@ -53,6 +54,7 @@ class Marcacao:
     offline: bool
     hash: str
     linha: str
+    alertas: list[str] = field(default_factory=list)
 
 
 async def criar_esquema(conn: asyncpg.Connection) -> None:
@@ -84,13 +86,13 @@ async def _gravar(conn: asyncpg.Connection, est: asyncpg.Record, *, nsr: int, ti
                   gravado_em: datetime, linha: str, marcado_em: datetime | None = None,
                   cpf: str | None = None, coletor: int | None = None, offline: bool | None = None,
                   hash_: str | None = None, hash_anterior: str | None = None,
-                  origem: dict | None = None) -> int:
+                  origem: dict | None = None, prova_sha256: str | None = None) -> int:
     rid = await conn.fetchval(
         """INSERT INTO registros (estabelecimento_id, nsr, tipo, gravado_em, marcado_em, cpf,
-               coletor, offline, hash, hash_anterior, origem, linha)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12) RETURNING id""",
+               coletor, offline, hash, hash_anterior, origem, linha, prova_sha256)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13) RETURNING id""",
         est["id"], nsr, tipo, gravado_em, marcado_em, cpf, coletor, offline, hash_, hash_anterior,
-        json.dumps(origem or {}), linha,
+        json.dumps(origem or {}, ensure_ascii=False), linha, prova_sha256,
     )
     await conn.execute(
         "UPDATE estabelecimentos SET ultimo_nsr = $2, ultimo_hash = COALESCE($3, ultimo_hash) WHERE id = $1",
@@ -272,7 +274,8 @@ async def registrar_evento(conn: asyncpg.Connection, estabelecimento_id: int, ev
 
 async def marcar(conn: asyncpg.Connection, estabelecimento_id: int, *, cpf: str, coletor: int,
                  offline: bool = False, marcado_em_no_coletor: datetime | None = None,
-                 origem: dict | None = None) -> Marcacao:
+                 origem: dict | None = None, prova: "pv.Prova | None" = None,
+                 avisos_da_prova: list[str] | None = None) -> Marcacao:
     """Grava a batida. Não há horário proibido, autorização prévia nem batida
     automática (art. 74): qualquer empregado ativo bate a qualquer hora.
 
@@ -302,10 +305,35 @@ async def marcar(conn: asyncpg.Connection, estabelecimento_id: int, *, cpf: str,
         anterior = est["ultimo_hash"]
         linha, h = f.registro_7(nsr=nsr, marcado_em=marcado_em, gravado_em=gravado_em, fuso=est["fuso"],
                                 cpf=c, coletor=coletor, offline=offline, hash_anterior=anterior)
+        # A prova (fase 7): apurada AGORA e gravada com a batida. Nada aqui
+        # impede a batida: o que faltar vira alerta.
+        cfg = await pv.configuracao(conn, est["id"])
+        prova = prova or pv.Prova()
+        local = prova.local if cfg.coletar_local else None
+        cercas = await conn.fetch("SELECT nome, latitude, longitude, raio_m FROM cercas "
+                                  "WHERE estabelecimento_id=$1 AND ativa", est["id"]) if cfg.coletar_local else []
+        avaliacao = pv.avaliar_cercas(local, cercas)
+        foto_cifrada = None
+        foto_sha = None
+        avisos = list(avisos_da_prova or [])
+        if cfg.coletar_foto and prova.foto:
+            try:
+                foto_cifrada = pv.cifrar(prova.foto, f"{est['id']}:{nsr}".encode())
+                foto_sha = hashlib.sha256(prova.foto).hexdigest()
+            except pv.ProvaInvalida as e:
+                avisos.append(f"foto não guardada: {e}")
+        resumo = pv.resumo_da_prova(pv.Prova(local, prova.dispositivo, prova.ip), avaliacao, foto_sha, cfg)
+        resumo["alertas"] = avisos + resumo["alertas"]
         rid = await _gravar(conn, est, nsr=nsr, tipo=7, gravado_em=gravado_em, linha=linha,
                             marcado_em=marcado_em, cpf=c, coletor=coletor, offline=offline,
-                            hash_=h, hash_anterior=anterior, origem=origem)
-    return Marcacao(rid, est["id"], nsr, c, marcado_em, gravado_em, coletor, offline, h, linha)
+                            hash_=h, hash_anterior=anterior, origem={**(origem or {}), "prova": resumo},
+                            prova_sha256=pv.hash_da_prova(resumo))
+        if foto_cifrada is not None:
+            nonce, cifrada = foto_cifrada
+            await conn.execute(
+                "INSERT INTO fotos (registro_id, nonce, cifrada, sha256, tipo, expira_em) VALUES ($1,$2,$3,$4,$5,$6)",
+                rid, nonce, cifrada, foto_sha, pv.tipo_da_foto(prova.foto), pv.expira_em(cfg, gravado_em))
+    return Marcacao(rid, est["id"], nsr, c, marcado_em, gravado_em, coletor, offline, h, linha, resumo["alertas"])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -318,7 +346,8 @@ async def conferir(conn: asyncpg.Connection, estabelecimento_id: int) -> list[st
     registros 2 e 5, hash de cada registro 7 recalculado e encadeado."""
     problemas: list[str] = []
     linhas = await conn.fetch(
-        "SELECT nsr, tipo, linha, hash, hash_anterior FROM registros WHERE estabelecimento_id=$1 ORDER BY nsr",
+        "SELECT nsr, tipo, linha, hash, hash_anterior, origem, prova_sha256 FROM registros "
+        "WHERE estabelecimento_id=$1 ORDER BY nsr",
         estabelecimento_id)
     esperado_nsr = 1
     anterior: str | None = None
@@ -339,6 +368,10 @@ async def conferir(conn: asyncpg.Connection, estabelecimento_id: int) -> list[st
             if recalculado != r["hash"] or r["linha"][73:] != r["hash"]:
                 problemas.append(f"NSR {r['nsr']}: hash da marcação não confere")
             anterior = r["hash"]
+            if r["prova_sha256"] is not None:
+                p = json.loads(r["origem"]).get("prova")
+                if p is None or pv.hash_da_prova(p) != r["prova_sha256"]:
+                    problemas.append(f"NSR {r['nsr']}: a prova da batida (local, cerca, foto) foi alterada")
         esperado_nsr += 1
     est = await conn.fetchrow("SELECT ultimo_nsr, ultimo_hash FROM estabelecimentos WHERE id=$1", estabelecimento_id)
     if est is not None and linhas and est["ultimo_nsr"] != linhas[-1]["nsr"]:

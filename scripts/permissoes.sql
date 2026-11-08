@@ -15,7 +15,9 @@ END $$;
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ponto_rep, ponto_ptrp;
 
 GRANT SELECT, INSERT, UPDATE ON estabelecimentos, empregados TO ponto_rep;
-GRANT SELECT, INSERT ON registros, comprovantes TO ponto_rep;
+GRANT SELECT, INSERT ON registros, comprovantes, provas_config, acessos_a_fotos TO ponto_rep;
+GRANT SELECT, INSERT, UPDATE ON cercas TO ponto_rep;
+GRANT SELECT, INSERT, DELETE ON fotos TO ponto_rep;  -- DELETE só passa depois do prazo (trigger)
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ponto_rep;
 
 GRANT SELECT ON estabelecimentos, empregados, registros TO ponto_ptrp;

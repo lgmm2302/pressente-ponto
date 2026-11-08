@@ -86,6 +86,7 @@ class Marca:
     desconsiderada: bool = False
     motivo: str = ""
     contestada: bool = False          # o empregado recusou o tratamento
+    alertas: tuple[str, ...] = ()     # da prova da batida (fora da cerca, sem foto...)
 
 
 @dataclass
@@ -290,6 +291,9 @@ def apurar(*, inicio: date, fim: date, marcas: list[Marca], escala: Callable[[da
             if m.momento.date() == d:
                 dia.marcas.append(MarcaNoDia(m, "D", 0))
         dia.marcas.sort(key=lambda x: x.marca.momento)
+        for x in dia.marcas:
+            for a in x.marca.alertas:
+                dia.alertas.append(f"{x.marca.momento:%H:%M}: {a}")
         if dia.interjornada_faltante:
             dia.alertas.append(f"interjornada {dia.interjornada_faltante} min menor que "
                                f"{r.interjornada_minima // 60} h (CLT art. 66)")

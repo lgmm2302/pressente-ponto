@@ -89,6 +89,21 @@ MUTACOES = [
     ("ptrp/aej.py", 'if (x.tipo == "D" or m.fonte == "I") else ""', 'if x.tipo == "D" else ""',
      "inclusão sem motivo no AEJ"),
     ("ptrp/aej.py", 'VERSAO_DO_LEIAUTE = "002"', 'VERSAO_DO_LEIAUTE = "001"', "versão antiga do leiaute"),
+    # ── prova da batida ──
+    ("reppp/registro.py", "if cfg.coletar_foto and prova.foto:", "if prova.foto:", "foto guardada sem a empresa pedir"),
+    ("reppp/registro.py", "local = prova.local if cfg.coletar_local else None", "local = prova.local",
+     "localização guardada sem a empresa pedir"),
+    ("reppp/prova.py", 'excesso = d - c["raio_m"] - folga', 'excesso = d - c["raio_m"]', "cerca sem a folga do GPS"),
+    ("reppp/prova.py", "folga = min(local.precisao_m or 0, FOLGA_DE_PRECISAO_MAXIMA)", "folga = local.precisao_m or 0",
+     "GPS impreciso apaga a cerca"),
+    ("reppp/prova.py", "if self.coletar_foto and len(self.base_legal_foto.strip()) < 10:", "if False:",
+     "foto sem base legal (LGPD)"),
+    ("reppp/prova.py", """        await conn.execute("INSERT INTO acessos_a_fotos (registro_id, quem_cpf, motivo) VALUES ($1,$2,$3)",
+                           registro_id, quem_cpf, motivo[:300])""", "        pass", "foto aberta sem trilha"),
+    ("reppp/esquema.sql", "IF TG_OP = 'DELETE' AND OLD.expira_em IS NOT NULL AND OLD.expira_em <= now() THEN",
+     "IF TG_OP = 'DELETE' THEN", "foto apagável antes do prazo"),
+    ("reppp/registro.py", 'problemas.append(f"NSR {r[\'nsr\']}: a prova da batida (local, cerca, foto) foi alterada")',
+     "pass", "conferência cega para prova adulterada"),
 ]
 PLACEBO = ("reppp/formato.py", "Um valor que não cabe no leiaute.", "Um valor que não cabe no layout.",
            "PLACEBO — só um comentário")

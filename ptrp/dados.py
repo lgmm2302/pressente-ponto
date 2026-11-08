@@ -259,12 +259,14 @@ async def carregar(conn, eid: int, cpf: str, inicio: date, fim: date) -> Entrada
     local = lambda x: x.astimezone(zona).replace(tzinfo=None)  # noqa: E731
     marcas: list[Marca] = []
     for r in await conn.fetch(
-            """SELECT id, marcado_em FROM registros WHERE estabelecimento_id=$1 AND cpf=$2 AND tipo=7
+            """SELECT id, marcado_em, origem FROM registros WHERE estabelecimento_id=$1 AND cpf=$2 AND tipo=7
                   AND marcado_em >= $3 AND marcado_em < $4 ORDER BY nsr""", eid, c, de, ate):
         t = desc.get(r["id"])
+        alertas = tuple((json.loads(r["origem"] or "{}").get("prova") or {}).get("alertas") or ())
         marcas.append(Marca(local(r["marcado_em"]), "O", registro_id=r["id"],
                             tratamento_id=t["id"] if t else None, desconsiderada=t is not None,
-                            motivo=t["motivo"] if t else "", contestada=bool(t and t["decisao"] == "recusado")))
+                            motivo=t["motivo"] if t else "", contestada=bool(t and t["decisao"] == "recusado"),
+                            alertas=alertas))
     for t in validos:
         if t["tipo"] == "incluir" and de <= t["momento"] < ate:
             marcas.append(Marca(local(t["momento"]), "I", tratamento_id=t["id"], motivo=t["motivo"],

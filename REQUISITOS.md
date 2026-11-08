@@ -64,7 +64,11 @@ conhecido) antes do registro.
 - Sincronização e monitoramento do relógio com a HLB (desvio ≤ 30 s).
 - Eventos 07/08 automáticos de disponibilidade e indisponibilidade.
 - Alta disponibilidade e armazenamento redundante do ARP (infraestrutura).
-- Prova extra: local, cerca geográfica, foto/facial (LGPD), alertas.
+- Reconhecimento facial (comparar a foto com a do cadastro): hoje a foto é
+  guardada como prova; a comparação automática fica para um fornecedor
+  especializado, com relatório de impacto (LGPD art. 38) antes de ligar.
+- Prova da batida, a conferir com o advogado: o texto da base legal da foto e
+  o prazo de guarda que cada empresa vai usar.
 - Atestado técnico (Anexo VII) — rascunho para o Luiz e o advogado.
 
 ## Fontes

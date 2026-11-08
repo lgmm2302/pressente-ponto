@@ -37,6 +37,31 @@ altera; grava só nas tabelas `ptrp_*`, que também não aceitam UPDATE nem DELE
 Em produção, rode os dois processos com usuários de banco diferentes
 (`scripts/permissoes.sql`): o do tratamento só lê o REP-P.
 
+## A prova da batida (fase 7) — `reppp/prova.py`
+
+Nada bloqueia a batida (art. 74): o que faltar vira alerta no espelho.
+
+| Peça | Regra |
+| --- | --- |
+| Localização | Só no instante da batida, só se a empresa ligar `coletar_local`; nunca rastreamento |
+| Cercas | Raio de 10 a 5000 m; a precisão do GPS dá folga de até 100 m; o resultado (dentro/fora, distância) fica gravado com a batida |
+| Dispositivo e IP | Guardados na prova da batida |
+| Foto | Só com base legal registrada (LGPD art. 11); cifrada (AES-256-GCM) à parte; prazo de guarda; cada abertura registra quem, quando e por quê |
+| Integridade | O hash da prova fica no registro; a conferência acusa qualquer alteração |
+
+## Como publicar
+
+Os botões ficam em **Actions** no GitHub (copie antes os arquivos de
+`implantacao/workflows/` para `.github/workflows/` — veja o LEIA-ME de lá).
+
+1. Cadastre em Settings → Secrets and variables → Actions: os secrets
+   `PONTO_VM_HOST`, `PONTO_VM_USER`, `PONTO_VM_SSH_KEY` (os mesmos do servidor
+   da plataforma) e a variável `PONTO_HOST_PUBLICO` (ex.: `ponto.pressente.com.br`).
+2. Aponte o DNS desse endereço para o IP da VM.
+3. **Publicar o Pressente Ponto → 2 (instalar pela primeira vez)**.
+4. Depois, a cada versão nova: **3 (publicar)**. Para conferir: **1**.
+   Backup e expurgo das fotos vencidas: **5**.
+
 O que ainda falta está em `REQUISITOS.md` (pontos a confirmar no texto oficial)
 e no plano da especificação (programa de tratamento, AEJ, ajustes com ciência,
 prova extra, integração).

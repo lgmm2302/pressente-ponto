@@ -60,5 +60,6 @@ def test_ponta_a_ponta(clientes):
     assert len(nomes) == 2 and nomes[1] == nomes[0] + ".p7s"
     assert trat.post("/v1/regras", headers=h, json={"vigencia": "2027-01-01", "regras": {"adicional_extra": 10},
                                                     "autor_cpf": CPF_RESP}).status_code == 422
+    assert trat.get("/v1/saude-tratamento").json() == {"ok": True}
     assert trat.get("/v1/apuracao", headers={"X-Chave-Estabelecimento": "x"},
                     params={"cpf": CPF_A, "inicio": hoje, "fim": hoje}).status_code == 401
