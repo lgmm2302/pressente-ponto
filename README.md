@@ -49,6 +49,20 @@ Nada bloqueia a batida (art. 74): o que faltar vira alerta no espelho.
 | Foto | Só com base legal registrada (LGPD art. 11); cifrada (AES-256-GCM) à parte; prazo de guarda; cada abertura registra quem, quando e por quê |
 | Integridade | O hash da prova fica no registro; a conferência acusa qualquer alteração |
 
+## A gestão (fases 10 a 12) — `ppgestao/`
+
+Programa à parte do REP-P e do tratamento: não registra nem trata marcação, ajuda o gestor a decidir.
+Cálculo puro e determinístico; quem aprova é uma pessoa.
+
+| Módulo | O que faz |
+| --- | --- |
+| `ppgestao/escala.py` | Planeja e valida a escala por data: 5x2 e 42 h (EC 141/2026), 8 h/dia, 11 h de interjornada, no máximo 6 dias seguidos, domingos em rodízio por grupo (a regra de cada grupo é da direção), premissas do gestor (gente por faixa, dias sem folga, reforço em datas, restrição de pessoa) e necessidade de gente pelo movimento do PDV |
+| `ppgestao/banco.py` | Banco de horas com vencimento (1, 6 ou 12 meses), débito abatendo o crédito mais antigo, custo de pagar, e sugestão de compensação só onde a loja continua coberta |
+| `ppgestao/indicadores.py` | Pontualidade, assiduidade, cumprimento, absenteísmo, nota e ranking; alertas de férias, atestado, licença, falta, banco e dias seguidos |
+| `ppgestao/api.py` | `/v1/gestao/...`, servido no processo do tratamento com a chave do estabelecimento; sem estado (cada pedido traz os dados) |
+
+O FPM Gestão usa uma cópia de `ppgestao/` (sem `api.py`) em `app/backend/ppgestao/`.
+
 ## Como publicar
 
 Os botões ficam em **Actions** no GitHub (copie antes os arquivos de

@@ -135,7 +135,7 @@ jobs:
       - name: Preparar o pacote
         run: |
           mkdir -p _pacote
-          cp -r reppp ptrp scripts implantacao requirements.txt VERSAO_PUBLICADA.json _pacote/
+          cp -r reppp ptrp ppgestao scripts implantacao requirements.txt VERSAO_PUBLICADA.json _pacote/
 
       - name: Enviar o código para a VM
         uses: appleboy/scp-action@v0.1.7

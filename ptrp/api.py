@@ -239,4 +239,14 @@ def criar_app(config: Config | None = None, assinador: assinatura.Assinador | No
         return Response(buf.getvalue(), media_type="application/zip",
                         headers={"Content-Disposition": f'attachment; filename="{arq.nome[:-4]}.zip"'})
 
+    # A gestão (escala 5x2, banco de horas, indicadores e alertas) — programa à parte (`ppgestao`), sem estado,
+    # servido neste processo com a mesma chave do estabelecimento.
+    from ppgestao.api import roteador as _gestao
+
+    async def _chave_vale(chave: str) -> bool:
+        async with estado["pool"].acquire() as c:
+            return await c.fetchval("SELECT 1 FROM estabelecimentos WHERE chave_api_hash=$1",
+                                    registro.hash_da_chave(chave)) is not None
+
+    app.include_router(_gestao(_chave_vale))
     return app
