@@ -52,6 +52,29 @@ saudavel() {
   return 1
 }
 
+# A release que está no ar de verdade (a pasta para onde o link «atual» aponta),
+# ou nada. NÃO usar `readlink -f "$BASE/atual"` para isso: ele devolve o caminho
+# do link mesmo quando o link ainda não existe — foi assim que a 1ª instalação
+# (08/11/2026) gravou «anterior = /opt/pressente-ponto/atual», e um «voltar»
+# nesse estado faria «atual» apontar para si mesmo.
+versao_no_ar() {
+  [ -L "$BASE/atual" ] || return 0
+  readlink -e "$BASE/atual" 2>/dev/null || true
+}
+
+# A versão guardada em $BASE/anterior — só se for uma release de verdade:
+# existe, está em releases/, não é o link «atual» nem a versão no ar.
+anterior_valida() {
+  local a
+  a="$(cat "$BASE/anterior" 2>/dev/null || true)"
+  [ -n "$a" ] || return 1
+  [ -d "$a" ] || return 1
+  [ "$a" != "$BASE/atual" ] || return 1
+  [ "$a" != "$(versao_no_ar)" ] || return 1
+  case "$a" in "$BASE/releases/"*) ;; *) return 1 ;; esac
+  echo "$a"
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 verificar() {
   titulo "Pressente Ponto — verificação (só leitura)"
@@ -65,8 +88,8 @@ verificar() {
   echo "[saúde] REP-P: $(curl -fsS -m 3 "http://127.0.0.1:$PORTA_REP/v1/saude" 2>/dev/null || echo 'não responde')"
   echo "[saúde] tratamento: $(curl -fsS -m 3 "http://127.0.0.1:$PORTA_TRAT/v1/saude-tratamento" 2>/dev/null || echo 'não responde')"
   echo "[versão no ar] $(curl -fsS -m 3 "http://127.0.0.1:$PORTA_REP/v1/versao" 2>/dev/null || echo '?')"
-  echo "[pasta atual] $(readlink -f "$BASE/atual" 2>/dev/null || echo 'nenhuma')"
-  echo "[anterior] $(cat "$BASE/anterior" 2>/dev/null || echo 'nenhuma')"
+  echo "[pasta atual] $(v="$(versao_no_ar)"; echo "${v:-nenhuma}")"
+  echo "[anterior] $(anterior_valida || echo 'nenhuma')"
   if [ -n "$HOST_PUBLICO" ]; then
     echo "[porta da frente] https://$HOST_PUBLICO/v1/hora → $(curl -fsS -m 5 "https://$HOST_PUBLICO/v1/hora" 2>/dev/null || echo 'não responde (DNS apontado para esta VM?)')"
   fi
@@ -265,7 +288,7 @@ publicar() {
   if [ -f "$rel/implantacao/desenvolvedor.env" ]; then
     sudo -n install -o root -g ponto -m 0640 "$rel/implantacao/desenvolvedor.env" "$ETC/desenvolvedor.env"
   fi
-  anterior="$(readlink -f "$BASE/atual" 2>/dev/null || true)"
+  anterior="$(versao_no_ar)"
   trocar_para "$rel"
   if saudavel; then
     if [ -n "$anterior" ] && [ "$anterior" != "$rel" ]; then
@@ -291,9 +314,10 @@ voltar() {
   titulo "Pressente Ponto — voltar para a versão anterior"
   precisa_sudo
   local anterior atual
-  anterior="$(cat "$BASE/anterior" 2>/dev/null || true)"
-  [ -n "$anterior" ] && [ -d "$anterior" ] || falha "não há versão anterior guardada. Nada mudou."
-  atual="$(readlink -f "$BASE/atual")"
+  anterior="$(anterior_valida || true)"
+  [ -n "$anterior" ] || falha "não há versão anterior válida guardada. Nada mudou."
+  atual="$(versao_no_ar)"
+  [ -n "$atual" ] || falha "não há versão no ar para guardar como anterior. Nada mudou."
   trocar_para "$anterior"
   saudavel || { trocar_para "$atual"; falha "a anterior não respondeu; mantive a atual."; }
   echo "$atual" | sudo -n tee "$BASE/anterior" >/dev/null
